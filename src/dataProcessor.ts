@@ -162,5 +162,53 @@ export function formatSummary(summary: SignResultSummary): string {
     }
   }
   
+  // 追加逐条签到明细
+  text += formatDetails(summary);
+  
+  return text;
+}
+
+/**
+ * 格式化签到明细 - 逐条列出每个贴吧的签到状态
+ * @param summary - 汇总结果
+ * @returns 格式化后的明细文本（无数据时返回空字符串）
+ */
+export function formatDetails(summary: SignResultSummary): string {
+  const successResults = summary.signResults.success;
+  const failedResults = summary.signResults.failed;
+  
+  if (successResults.length === 0 && failedResults.length === 0) {
+    return '';
+  }
+  
+  // 按原始索引排序，保持与贴吧列表一致的顺序
+  const allResults = [...successResults, ...failedResults]
+    .sort((a, b) => (a.index || 0) - (b.index || 0));
+  
+  let text = `\n\n📋 签到明细 (共 ${allResults.length} 个):\n`;
+  
+  allResults.forEach(item => {
+    // 图标区分：新签到 ✅ / 已签到 📌 / 失败 ❌
+    const icon = item.success
+      ? (item.message === '已经签到过了' ? '📌' : '✅')
+      : '❌';
+    
+    // 组装排名、连续签到天数等附加信息
+    const extraParts: string[] = [];
+    if (item.info?.rank !== undefined && item.info?.rank !== null && item.info?.rank !== '') {
+      extraParts.push(`排名 ${item.info.rank}`);
+    }
+    if (item.info?.continueCount !== undefined && item.info?.continueCount !== null && item.info?.continueCount !== '') {
+      extraParts.push(`连续 ${item.info.continueCount} 天`);
+    }
+    const extra = extraParts.length > 0 ? ` - ${extraParts.join('，')}` : '';
+    
+    // 失败项附带失败原因；重试成功的加以标注
+    const retryTag = item.retried ? ' (重试成功)' : '';
+    const reason = item.success ? '' : ` - ${item.message}`;
+    
+    text += `${icon} ${item.index}. ${item.name}${extra}${retryTag}${reason}\n`;
+  });
+  
   return text;
 } 

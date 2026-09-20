@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.processSignResult = processSignResult;
 exports.summarizeResults = summarizeResults;
 exports.formatSummary = formatSummary;
+exports.formatDetails = formatDetails;
 /**
  * 处理签到结果数据
  * @param signResult - 签到结果
@@ -146,5 +147,44 @@ function formatSummary(summary) {
             text += `- ${errorMessage}: ${count} 个\n`;
         }
     }
+    // 追加逐条签到明细
+    text += formatDetails(summary);
+    return text;
+}
+/**
+ * 格式化签到明细 - 逐条列出每个贴吧的签到状态
+ * @param summary - 汇总结果
+ * @returns 格式化后的明细文本（无数据时返回空字符串）
+ */
+function formatDetails(summary) {
+    const successResults = summary.signResults.success;
+    const failedResults = summary.signResults.failed;
+    if (successResults.length === 0 && failedResults.length === 0) {
+        return '';
+    }
+    // 按原始索引排序，保持与贴吧列表一致的顺序
+    const allResults = [...successResults, ...failedResults]
+        .sort((a, b) => (a.index || 0) - (b.index || 0));
+    let text = `\n\n📋 签到明细 (共 ${allResults.length} 个):\n`;
+    allResults.forEach(item => {
+        var _a, _b, _c, _d, _e, _f;
+        // 图标区分：新签到 ✅ / 已签到 📌 / 失败 ❌
+        const icon = item.success
+            ? (item.message === '已经签到过了' ? '📌' : '✅')
+            : '❌';
+        // 组装排名、连续签到天数等附加信息
+        const extraParts = [];
+        if (((_a = item.info) === null || _a === void 0 ? void 0 : _a.rank) !== undefined && ((_b = item.info) === null || _b === void 0 ? void 0 : _b.rank) !== null && ((_c = item.info) === null || _c === void 0 ? void 0 : _c.rank) !== '') {
+            extraParts.push(`排名 ${item.info.rank}`);
+        }
+        if (((_d = item.info) === null || _d === void 0 ? void 0 : _d.continueCount) !== undefined && ((_e = item.info) === null || _e === void 0 ? void 0 : _e.continueCount) !== null && ((_f = item.info) === null || _f === void 0 ? void 0 : _f.continueCount) !== '') {
+            extraParts.push(`连续 ${item.info.continueCount} 天`);
+        }
+        const extra = extraParts.length > 0 ? ` - ${extraParts.join('，')}` : '';
+        // 失败项附带失败原因；重试成功的加以标注
+        const retryTag = item.retried ? ' (重试成功)' : '';
+        const reason = item.success ? '' : ` - ${item.message}`;
+        text += `${icon} ${item.index}. ${item.name}${extra}${retryTag}${reason}\n`;
+    });
     return text;
 }

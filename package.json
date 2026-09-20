@@ -7,7 +7,9 @@
     "build": "tsc",
     "start": "npm run build && node dist/index.js",
     "test": "npm run build && node dist/local-test.js",
-    "dev": "ts-node src/index.ts"
+    "dev": "ts-node src/index.ts",
+    "notify:dev": "ts-node src/debug-dingtalk.ts",
+    "notify:test": "npm run build && node dist/debug-dingtalk.js"
   },
   "repository": {
     "type": "git",

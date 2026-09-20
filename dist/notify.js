@@ -79,6 +79,33 @@ function handleNotifyResult(platform, response) {
         console.log(`⚠️ ${platform}通知发送失败: ${(response === null || response === void 0 ? void 0 : response.statusText) || '未知错误'}`);
     }
 }
+/** 钉钉 markdown 单条消息 text 的上限为 20000 字节，这里保留安全余量 */
+const DINGTALK_MAX_BYTES = 15000;
+/**
+ * 按行把长文本切分为多个不超过指定字节数的分片
+ * @param text - 待切分的文本
+ * @param maxBytes - 每个分片的最大字节数（按 UTF-8 计算）
+ * @returns 分片数组
+ */
+function splitTextByBytes(text, maxBytes) {
+    const lines = text.split('\n');
+    const chunks = [];
+    let current = '';
+    for (const line of lines) {
+        const candidate = current ? `${current}\n${line}` : line;
+        // 单行本身就超长时也只能独立成片
+        if (current && Buffer.byteLength(candidate, 'utf8') > maxBytes) {
+            chunks.push(current);
+            current = line;
+        }
+        else {
+            current = candidate;
+        }
+    }
+    if (current)
+        chunks.push(current);
+    return chunks.length > 0 ? chunks : [''];
+}
 /**
  * Server酱通知 (ServerChan)
  * @param options - Server酱配置选项
@@ -174,22 +201,29 @@ function sendDingTalk(options) {
         if (!webhook)
             return { success: false, message: '钉钉Webhook未设置', channel: 'DingTalk' };
         try {
-            // 如果有安全密钥，需要计算签名
-            let url = webhook;
-            if (secret) {
+            // 每次发送时重新计算签名，避免时间戳过期
+            const buildUrl = () => {
+                if (!secret)
+                    return webhook;
                 const timestamp = Date.now();
                 const hmac = crypto.createHmac('sha256', secret);
                 const sign = encodeURIComponent(hmac.update(`${timestamp}\n${secret}`).digest('base64'));
-                url = `${webhook}&timestamp=${timestamp}&sign=${sign}`;
+                return `${webhook}&timestamp=${timestamp}&sign=${sign}`;
+            };
+            // 内容超长时按分片依次发送，避免超出钉钉单条消息上限
+            const chunks = splitTextByBytes(content, DINGTALK_MAX_BYTES);
+            for (let i = 0; i < chunks.length; i++) {
+                const baseTitle = title || '通知';
+                const partTitle = chunks.length > 1 ? `${baseTitle} (${i + 1}/${chunks.length})` : baseTitle;
+                const response = yield axios_1.default.post(buildUrl(), {
+                    msgtype: 'markdown',
+                    markdown: {
+                        title: partTitle,
+                        text: `### ${partTitle}\n${chunks[i]}`
+                    }
+                });
+                handleNotifyResult('钉钉', response);
             }
-            const response = yield axios_1.default.post(url, {
-                msgtype: 'markdown',
-                markdown: {
-                    title: title || '通知',
-                    text: `### ${title || '通知'}\n${content}`
-                }
-            });
-            handleNotifyResult('钉钉', response);
             return { success: true, message: '钉钉通知发送成功', channel: 'DingTalk' };
         }
         catch (error) {
